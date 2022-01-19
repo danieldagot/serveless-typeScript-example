@@ -1,6 +1,7 @@
 {
   "headers": {
-    "Content-Type": "application/json"
+    "access-control-allow-origin" : "*",
+    "content-type" : "application/json; charset=utf-8"
   },
-  "body": "{\"name\": \"Frederic\"}"
+  "body": "{\"name\": \"dagot\"}"
 }
