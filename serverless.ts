@@ -2,11 +2,12 @@ import type { AWS } from '@serverless/typescript';
 
 // import hello from '@functions/hello';
 // import word from '@functions/word';
-import {getPartner} from '@function';
+import { getPartner } from '$functions/index';
+import provider from '$config/provider';
 
 
 const serverlessConfiguration: AWS = {
-  service: 'serveless-back',
+  service: 'serverless-back',
   frameworkVersion: '2',
   custom: {
     webpack: {
@@ -14,21 +15,10 @@ const serverlessConfiguration: AWS = {
       includeModules: true,
     },
   },
-  plugins: ['serverless-webpack',"serverless-offline"],
-  provider: {
-    name: 'aws',
-    runtime: 'nodejs14.x',
-    apiGateway: {
-      minimumCompressionSize: 1024,
-      shouldStartNameWithService: true,
-    },
-    environment: {
-      AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1',
-    },
-    lambdaHashingVersion: '20201221',
-  },
+  plugins: ['serverless-webpack', "serverless-offline", "serverless-domain-manager"],
+  provider,
   // import the function via paths
-  functions: {getPartner},
+  functions: { getPartner },
 };
 
 module.exports = serverlessConfiguration;

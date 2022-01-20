@@ -1,0 +1,380 @@
+service: serverless-v1 # NOTE: update this with your service name
+custom:
+  # serverless offline plugin setup
+  serverless-offline:
+    httpPort: 3001
+  Outputs:
+    WildRydesDynamoDbARN:
+      Description: "Wild Rydes DynamoDB ARN"
+      Value:
+        "Fn::GetAtt": [ serverlessSuppliers, Arn ]
+  customDomain:
+    domainName: api.guini.io
+    basePath: ${self:provider.stage}
+    stage: ${self:provider.stage}
+    enabled: true
+    createRoute53Record: true
+  bucket: suppliersPhotoBucket
+  suppliersTableName : suppliers-${self:provider.stage}
+  ordersTableName : orders-${self:provider.stage}
+  supplierRoleName : supplierRole${self:provider.stage}
+  calcItemPriceRoleName : calcItemPriceRole${self:provider.stage}
+  supplierTableName : supplier-${self:provider.stage}
+  orderRoleName : orderRole${self:provider.stage}
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+  stage: ${opt:stage, 'dev'}
+
+functions:
+# Supplier
+  ServelessGetSupplier:
+    handler: dev/handlers/suppliers/getSupplierHandler.getSupplierHandler
+    environment:
+      SAMPLE_TABLE: ${self:custom.suppliersTableName}
+    role: supplierRole
+    events:
+      - http:
+          path: /suppliers/{id}
+          method: get
+
+  ServelessGetSupplierPricingUnits:
+    handler: dev/handlers/suppliers/getSupplierPricingUnitsHandler.getSupplierPricingUnitsHandler
+    environment:
+      SAMPLE_TABLE: ${self:custom.suppliersTableName}
+    role: supplierRole
+    events:
+      - http:
+          path: /suppliers/{id}/pricingUnits
+          method: get
+
+  ServerlessCrateSupplier:
+    handler: dev/handlers/suppliers/createSupplierHandler.createSupplierHandler
+    environment:
+      SAMPLE_TABLE: ${self:custom.suppliersTableName}
+    role: supplierRole
+    events:
+      - http:
+          path: /suppliers
+          method: post
+
+  ServerlessGetCommentsSupplier:
+    handler: dev/handlers/suppliers/getSupplierCommentsHandler.getSupplierCommentsHandler
+    environment:
+      SAMPLE_TABLE: ${self:custom.suppliersTableName}
+    role: supplierRole
+    events:
+      - http:
+          path: /suppliers/{id}/comments
+          method: get
+
+
+  ServerlessSupplierCalcPrices:
+    handler: dev/handlers/suppliers/calcItemPriceForSupplier.calcItemPriceForSupplier
+    environment:
+      SAMPLE_TABLE: ${self:custom.suppliersTableName}
+      ORDER_TABLE: ${self:custom.ordersTableName}
+
+    role: calcItemPriceForSupplierRole
+    events:
+      - http:
+          path: /orders/{id}/prices
+          method: get
+
+  ServerlessOrderCalcPrices:
+    handler: dev/handlers/orders/createOrderHandler.createOrderHandler
+    environment:
+      SAMPLE_TABLE: ${self:custom.suppliersTableName}
+      ORDER_TABLE: ${self:custom.ordersTableName}
+
+    role: calcItemPriceForSupplierRole
+    events:
+      - http:
+          path: /orders/prices/{id}
+          method: post
+
+          
+  #  orders 
+
+  # SupplierUpload:
+  #   handler: fileUploaderHome.handler
+  #   # The `events` block defines how to trigger the handler.helloWorld code
+  #   events:
+  #     - http:
+  #         path: upload
+  #         method: post
+  #         cors: true
+  #   environment:
+  #     Bucket: ${self:custom.bucket} 
+
+      
+  # ServelessCreateOrderHandler:
+  #   handler: dev/handlers/orders/createOrderHandler.createOrderHandler
+  #   role: orderRole
+  #   environment:
+  #     SAMPLE_TABLE: ${self:custom.ordersTableName}
+  #   events:
+  #     - http:
+  #         path: /orders
+  #         method: post
+  #         # authorizer:
+  #         #   name: authorizer
+  #         #   arn: arn:aws:cognito-idp:us-east-1:343927360524:userpool/us-east-1_wc3OzZ9lw
+
+  ServelessCreateOrderHandler:
+    handler: dev/handlers/orders/createOrderHandler.createOrderHandler
+    role: calcItemPriceForSupplierRole
+    environment:
+      SAMPLE_TABLE: ${self:custom.suppliersTableName}
+      ORDER_TABLE: ${self:custom.ordersTableName}
+    events:
+      - http:
+          path: /orders
+          method: post
+          # authorizer:
+          #   name: authorizer
+          #   arn: arn:aws:cognito-idp:us-east-1:343927360524:userpool/us-east-1_wc3OzZ9lw
+  
+
+  ServelessUpdateOrderHandler:
+    handler: dev/handlers/orders/updateOrderHandler.updateOrderHandler
+    environment:
+      SAMPLE_TABLE: ${self:custom.ordersTableName}
+    role: orderRole
+    events:
+      - http:
+          path: /orders/{id}
+          method: PUT
+          cors : true 
+          # authorizer:
+          #   name: authorizer
+          #   arn: arn:aws:cognito-idp:us-east-1:343927360524:userpool/us-east-1_wc3OzZ9lw
+  
+# TODO: https://stackoverflow.com/questions/41664708/cognito-user-pool-authorizer-with-serverless-framework
+  ServelessGetOrderHandler:
+    handler: dev/handlers/orders/getOrderHandler.getOrderHandler
+    environment:
+      SAMPLE_TABLE: ${self:custom.ordersTableName}
+    role: orderRole
+    events:
+      - http:
+          path: /orders/{id}
+          method: get
+          # authorizer:
+          #   name: authorizer
+          #   arn: arn:aws:cognito-idp:us-east-1:343927360524:userpool/us-east-1_wc3OzZ9lw
+          #   scopes:
+          #     - my-app/read
+plugins:
+  - serverless-offline
+  - serverless-domain-manager
+  # ServelessGetSupplier:
+  #   handler: handler.handler
+  #   role: getSupplier
+  #   events:
+  #     - http:
+  #         path: /suppliers/{id}
+  #         method: get
+
+# you can add CloudFormation resource templates here
+resources:
+  Resources:
+  #  ---------------------dynamoDB----------------
+    serverlessSuppliers:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.suppliersTableName}
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+
+    serverlessOrdersNew:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.ordersTableName}
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+    # StorageBucket:
+    #   Type: "AWS::S3::Bucket"
+    #   Properties:
+    #     BucketName: ${self:custom.bucket}
+        
+#  ----------------------------------------rules --------------------------------
+    supplierRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: ${self:custom.supplierRoleName}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: DynamoDBWriteAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource: 
+                    - 'Fn::Join':
+                      - ':'
+                      -
+                        - 'arn:aws:logs'
+                        - Ref: 'AWS::Region'
+                        - Ref: 'AWS::AccountId'
+                        - 'log-group:/aws/lambda/*:*:*'
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                    - dynamodb:GetItem
+                  Resource:
+                    'Fn::GetAtt': [ serverlessSuppliers, Arn ]
+
+
+
+    orderRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: ${self:custom.orderRoleName}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: DynamoDBWriteAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource: 
+                    - 'Fn::Join':
+                      - ':'
+                      -
+                        - 'arn:aws:logs'
+                        - Ref: 'AWS::Region'
+                        - Ref: 'AWS::AccountId'
+                        - 'log-group:/aws/lambda/*:*:*'
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                    - dynamodb:GetItem
+                  Resource:
+                    'Fn::GetAtt': [ serverlessOrdersNew, Arn ]
+
+
+    SupplierUploadRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: SupplierUploadRole-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: s3WriteAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+              - Effect: "Allow"
+                Action:
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                Resource:
+                  - "arn:aws:s3:::${self:custom.bucket}/*"
+
+    calcItemPriceForSupplierRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: calcItemPriceRole${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: DynamoDBWriteAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource: 
+                    - 'Fn::Join':
+                      - ':'
+                      -
+                        - 'arn:aws:logs'
+                        - Ref: 'AWS::Region'
+                        - Ref: 'AWS::AccountId'
+                        - 'log-group:/aws/lambda/*:*:*'
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                    - dynamodb:GetItem
+                  Resource:
+                    'Fn::GetAtt': [ serverlessOrdersNew, Arn ]
+          - PolicyName: DynamoDBWriteAccessOrder
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource: 
+                    - 'Fn::Join':
+                      - ':'
+                      -
+                        - 'arn:aws:logs'
+                        - Ref: 'AWS::Region'
+                        - Ref: 'AWS::AccountId'
+                        - 'log-group:/aws/lambda/*:*:*'
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                    - dynamodb:GetItem
+                  Resource:
+                    'Fn::GetAtt': [ serverlessSuppliers, Arn ]
+
+
+
+
